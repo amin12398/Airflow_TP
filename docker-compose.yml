@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - airflow_net
+
+  mysql:
+    image: mysql:8.0
+    container_name: airflow-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: airflow
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - airflow_net
+
+  airflow-init:
+    image: apache/airflow:2.6.3
+    depends_on:
+      - postgres
+      - mysql
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: my_airflow_secret_123
+    entrypoint: /bin/bash
+    command: >
+      -c "airflow db init &&
+      airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com"
+    networks:
+      - airflow_net
+
+  airflow-webserver:
+    image: apache/airflow:2.6.3
+    depends_on:
+      - postgres
+      - airflow-init
+    ports:
+      - "8084:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: my_airflow_secret_123
+    command: webserver
+    volumes:
+      - ./dags:/opt/airflow/dags
+    networks:
+      - airflow_net
+
+  airflow-scheduler:
+    image: apache/airflow:2.6.3
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: my_airflow_secret_123
+    command: scheduler
+    volumes:
+      - ./dags:/opt/airflow/dags
+    networks:
+      - airflow_net
+
+volumes:
+  postgres_data:
+  mysql_data:
+
+networks:
+  airflow_net:
+    driver: bridge
